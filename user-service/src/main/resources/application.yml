@@ -1,0 +1,53 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/users_db}
+    username: gadget
+    password: gadget
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 5000          # Kafka down must not hang the relay thread
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate        # schema is owned by Flyway, never by Hibernate
+  flyway:
+    enabled: true
+
+app:
+  kafka:
+    topic: user-events
+  outbox:
+    poll-interval-ms: 1000
+    batch-size: 50
+    retain-published: 7d
+  jwt:
+    issuer: gadgetmart-auth
+    access-token-ttl: 15m
+    refresh-token-ttl: 7d
+    # Leave empty in local dev to use an ephemeral key (tokens die on restart).
+    # Set both in any shared/real environment (see scripts/generate-keys.sh).
+    private-key-path: ${JWT_PRIVATE_KEY_PATH:}
+    public-key-path: ${JWT_PUBLIC_KEY_PATH:}
+  admin:
+    # Bootstrap admin, created at startup if it does not exist. Override in real environments.
+    email: ${ADMIN_EMAIL:admin@gadgetmart.local}
+    password: ${ADMIN_PASSWORD:ChangeMe123!}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

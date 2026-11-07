@@ -1,0 +1,64 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: cart-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cart_db}
+    username: gadget
+    password: gadget
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate          # schema is owned by Flyway
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 500ms              # a slow cache must never slow the cart down
+
+app:
+  jwt:
+    jwk-set-uri: ${USER_SERVICE_URL:http://localhost:8081}/.well-known/jwks.json
+    issuer: gadgetmart-auth
+  internal:
+    api-key: ${INTERNAL_API_KEY:dev-internal-key-change-me}   # also sent to Catalog's /internal APIs
+  catalog:
+    base-url: ${CATALOG_SERVICE_URL:http://localhost:8082}
+    connect-timeout-ms: 1000
+    read-timeout-ms: 3000
+  cart:
+    max-lines: 20            # different items per cart
+    max-quantity: 10         # units per item (the DB CHECK in V1 also caps at 10: change both together)
+    cache-ttl: 10m
+    abandon-after: 30d       # carts untouched this long are deleted
+
+# Resilience4j: fail fast when Catalog is down instead of piling up slow requests
+resilience4j:
+  circuitbreaker:
+    instances:
+      catalog:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+        record-exceptions:
+          - com.gadgetmart.cart.exception.CatalogUnavailableException
+  retry:
+    instances:
+      catalog:
+        max-attempts: 3
+        wait-duration: 200ms
+        retry-exceptions:
+          - com.gadgetmart.cart.exception.CatalogUnavailableException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers
+  health:
+    redis:
+      enabled: false          # cache outage must not mark the service unhealthy (cart falls back to Postgres)

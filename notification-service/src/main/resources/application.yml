@@ -1,0 +1,50 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/notification_db}
+    username: gadget
+    password: gadget
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate          # schema is owned by Flyway
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest # a brand-new consumer group still sees events published while it was down
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:                     # only used to park poison messages on the dead-letter topics
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        max.block.ms: 5000
+
+app:
+  jwt:
+    jwk-set-uri: ${USER_SERVICE_URL:http://localhost:8081}/.well-known/jwks.json
+    issuer: gadgetmart-auth
+  kafka:
+    topics:
+      orders: order-events
+      users: user-events
+  notification:
+    max-attempts: 5               # delivery attempts per email / SMS before it is marked FAILED
+    retry-backoff: 30s,2m,10m,30m # wait before attempt 2, 3, 4, 5
+    lease: 2m                     # a claimed notification is retried after this if the service crashed mid-send
+    batch-size: 20
+    poll-interval-ms: 2000
+    mock:
+      failure-rate: 0.0           # DEV: 0.5 makes half of the mock email/SMS sends fail, to watch retries
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

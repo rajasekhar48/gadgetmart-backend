@@ -1,0 +1,88 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/orders_db}
+    username: gadget
+    password: gadget
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 5000          # Kafka down must not hang the relay thread
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate          # schema is owned by Flyway
+
+app:
+  kafka:
+    topic: order-events
+  outbox:
+    poll-interval-ms: 1000
+    batch-size: 50
+    retain-published: 7d
+  jwt:
+    jwk-set-uri: ${USER_SERVICE_URL:http://localhost:8081}/.well-known/jwks.json
+    issuer: gadgetmart-auth
+  internal:
+    api-key: ${INTERNAL_API_KEY:dev-internal-key-change-me}   # sent to Cart / Catalog /internal APIs
+  catalog:
+    base-url: ${CATALOG_SERVICE_URL:http://localhost:8082}
+  cart:
+    base-url: ${CART_SERVICE_URL:http://localhost:8083}
+  http:
+    connect-timeout-ms: 1000
+    read-timeout-ms: 3000
+  checkout:
+    recover-after: 2m             # PENDING_PAYMENT orders older than this are picked up by the recovery job
+    stale-after: 20m              # ... and cancelled if no payment was ever captured by then
+    recovery-interval-ms: 60000
+  payment:
+    provider: mock                # swap for razorpay / stripe later (implement PaymentProvider)
+    mock:
+      allow-simulation: true      # lets a request ask the mock to fail (simulatePayment=FAIL). DEV ONLY.
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+        record-exceptions:
+          - com.gadgetmart.order.exception.DownstreamUnavailableException
+    instances:
+      catalog:
+        base-config: default
+      cart:
+        base-config: default
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 200ms
+        retry-exceptions:
+          - com.gadgetmart.order.exception.DownstreamUnavailableException
+    instances:
+      catalog:
+        base-config: default
+      cart:
+        base-config: default
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers

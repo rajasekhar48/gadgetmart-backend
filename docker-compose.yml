@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: users_db
+      POSTGRES_USER: gadget
+      POSTGRES_PASSWORD: gadget
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gadget -d users_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/users_db
+      DB_USER: gadget
+      DB_PASSWORD: gadget
+      JWT_PRIVATE_KEY_PATH: /keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /keys/public.pem
+      ADMIN_EMAIL: admin@gadgetmart.local
+      ADMIN_PASSWORD: ChangeMe123!
+    volumes:
+      - ./keys:/keys:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # no published port: the only public entry point is the gateway
+
+  gateway-service:
+    build:
+      context: .
+      dockerfile: gateway-service/Dockerfile
+    environment:
+      USER_SERVICE_URL: http://user-service:8081
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-service
+
+volumes:
+  pgdata:

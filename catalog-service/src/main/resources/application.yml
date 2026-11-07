@@ -1,0 +1,34 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: catalog-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/catalog_db}
+    username: gadget
+    password: gadget
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate          # schema is owned by Flyway
+  flyway:
+    # db/seed holds DEV-ONLY sample listings. In production set FLYWAY_LOCATIONS=classpath:db/migration
+    locations: ${FLYWAY_LOCATIONS:classpath:db/migration,classpath:db/seed}
+
+app:
+  jwt:
+    jwk-set-uri: ${USER_SERVICE_URL:http://localhost:8081}/.well-known/jwks.json
+    issuer: gadgetmart-auth
+  internal:
+    # Shared secret for service-to-service calls to /internal/**. Replace with mTLS / service tokens later.
+    api-key: ${INTERNAL_API_KEY:dev-internal-key-change-me}
+  reservation:
+    ttl: 15m
+    scan-interval-ms: 30000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
